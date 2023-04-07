@@ -34,6 +34,6 @@ set_property(TARGET ${ThisLib} PROPERTY C_STANDARD 17)
 include(CTest)
 enable_testing()
 
-add_subdirectory(googletest)
+add_subdirectory(externals/googletest)
 add_subdirectory(tests)
 #add_subdirectory(src)
