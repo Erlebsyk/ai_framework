@@ -13,6 +13,8 @@ set(SourceFiles
     main.cpp
 )
 
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -lcublas -lcublas_device -lcudadevrt")
+
 CUDA_ADD_EXECUTABLE(ai_framework_bin main.cpp )
 target_link_libraries(ai_framework_bin ai_framework_lib)
 set_target_properties(ai_framework_bin PROPERTIES OUTPUT_NAME ai_framework_bin)
@@ -21,3 +23,4 @@ set_target_properties(ai_framework_bin PROPERTIES CUDA_ARCHITECTURES "75")
 set_target_properties(${This} PROPERTIES CUDA_ARCHITECTURES "75")
 set_property(TARGET ${This} PROPERTY CXX_STANDARD 17)
 set_property(TARGET ${This} PROPERTY C_STANDARD 17)
+set_property(TARGET ${This} PROPERTY CUDA_STANDARD 17)

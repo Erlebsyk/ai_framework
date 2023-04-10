@@ -10,6 +10,7 @@
 
 /** Standard library includes */
 #include <cstdint>
+#include <memory>
 
 /** External library includes */
 
@@ -19,7 +20,10 @@
 namespace ai
 {
 	/** Declarations */
-	class Layer;
+	#define CREATE_INPUT(name, inputs_n, sequence_n) \
+		std::shared_ptr<utils::DMatrix<inputs_n, sequence_n>> name = std::make_shared<utils::DMatrix<inputs_n, sequence_n>>();
+
+	template<size_t N_INPUTS, size_t N_NEURONS, size_t M> class Layer;
 	class NeuralNet;
 
 	/** Definitions */
@@ -30,13 +34,13 @@ namespace ai
 		kSoftMax
 	};
 
+	template<size_t N_INPUTS, size_t N_SERIES, size_t N_NEURONS>
 	class Layer{
 	protected:
-		const std::shared_ptr<utils::DMatrix> inputs_;
-		utils::DMatrix weights_;
-		utils::DMatrix biases_;
-		utils::DMatrix outputs_;
-		bool propagated_;
+		const std::shared_ptr<utils::DMatrix<N_INPUTS, N_SERIES>> inputs_;
+		utils::DMatrix<N_NEURONS, N_INPUTS> weights_;
+		utils::DMatrix<N_NEURONS, 1> biases_;
+		utils::DMatrix<N_INPUTS, N_NEURONS> outputs_;
 		void (*activation_function_ptr_)(float);
 
 		void AddBiases();
@@ -47,19 +51,19 @@ namespace ai
 
 	public:
 		Layer(
-			const std::shared_ptr<utils::DMatrix> inputs,
-			const size_t n_neurons,
-			ActivationFunction activatiuon_function
+			const std::shared_ptr<utils::DMatrix<N_INPUTS, N_SERIES>> inputs,
+			ActivationFunction activation_function
 		);
 		~Layer();
 
 		void Propagate();
 
-		utils::DMatrix WeightsGet() const;
-		utils::DMatrix BiasesGet() const;
-		std::shared_ptr<const utils::DMatrix> OutputGet() const;
+		utils::DMatrix<N_NEURONS, N_INPUTS> WeightsGet() const;
+		utils::DMatrix<N_NEURONS, 1> BiasesGet() const;
+		std::shared_ptr<const utils::DMatrix<N_INPUTS, N_NEURONS>> OutputGet() const;
 	};
-
 } // ai
+
+#include "neural_net.cu"
 
 #endif //NEURAL_NET_HPP_
