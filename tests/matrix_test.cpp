@@ -12,7 +12,8 @@
 #include <gtest/gtest.h>
 
 /** Project header includes	*/
-#include "../src/matrix.cuh"
+#define protected public
+#include "../src/utils/matrix.cuh"
 
 namespace test
 {
@@ -282,6 +283,111 @@ namespace test
 
 		EXPECT_TRUE(E == G);
 		EXPECT_TRUE(F == H);
+
+		const utils::DMatrix I = std::vector<std::vector<float>>{
+			{ 1.0f,	1.0f,	1.0f,	1.0f	},
+			{ 1.0f,	1.0f,	1.0f,	1.0f	},
+			{ 1.0f,	1.0f,	1.0f,	1.0f	}
+		};
+
+		const utils::DMatrix J = std::vector<std::vector<float>>{
+			{ 1.0f,	2.0f,	3.0f,	4.0f	},
+			{ 5.0f,	6.0f,	7.0f,	8.0f	},
+			{ 9.0f,	10.0f,	11.0f,	12.0f	}
+		};
+		
+		const utils::DMatrix K = std::vector<std::vector<float>>{
+			{ 1.0f,	2.0f,	3.0f,	4.0f	}
+		};
+		const utils::DMatrix L = std::vector<std::vector<float>>{
+			{ 1.0f	},
+			{ 2.0f	},
+			{ 3.0f	}
+		};
+		const utils::DMatrix M = std::vector<std::vector<float>>{
+			{ 1.0f, 4.0f	},
+			{ 2.0f, 5.0f	},
+			{ 3.0f, 6.0f	}
+		};
+
+		const utils::DMatrix R_IpJ = std::vector<std::vector<float>>{
+			{ 2.0f,		3.0f,	4.0f,	5.0f	},
+			{ 6.0f,		7.0f,	8.0f,	9.0f,	},
+			{ 10.0f,	11.0f,	12.0f,	13.0f	}
+		};
+		const utils::DMatrix R_IpK = std::vector<std::vector<float>>{
+			{ 2.0f,	3.0f,	4.0f,	5.0f	},
+			{ 2.0f,	3.0f,	4.0f,	5.0f	},
+			{ 2.0f,	3.0f,	4.0f,	5.0f	}
+		};
+		const utils::DMatrix R_IpL = std::vector<std::vector<float>>{
+			{ 2.0f,	2.0f,	2.0f,	2.0f	},
+			{ 3.0f,	3.0f,	3.0f,	3.0f	},
+			{ 4.0f,	4.0f,	4.0f,	4.0f	}
+		};
+
+		EXPECT_TRUE(R_IpJ == I + J);
+		EXPECT_TRUE(R_IpK == I + K);
+		EXPECT_TRUE(R_IpL == I + L);
+		EXPECT_THROW(I + M, std::runtime_error);
+
+		
+	}
+
+	TEST(device_matrix_test, sum)
+	{
+		const utils::DMatrix A = std::vector<std::vector<float>>{
+			{ 1.0f,	2.0f,	3.0f,	4.0f	},
+			{ 5.0f,	6.0f,	7.0f,	8.0f	},
+			{ 9.0f,	10.0f,	11.0f,	12.0f	}
+		};
+
+		EXPECT_FLOAT_EQ(A.SumGet(), 78.0f);
+		EXPECT_FLOAT_EQ(A.SumRowGet(0), 10.0f);
+		EXPECT_FLOAT_EQ(A.SumRowGet(1), 26.0f);
+		EXPECT_FLOAT_EQ(A.SumRowGet(2), 42.0f);
+		EXPECT_FLOAT_EQ(A.SumColGet(0), 15.0f);
+		EXPECT_FLOAT_EQ(A.SumColGet(1), 18.0f);
+		EXPECT_FLOAT_EQ(A.SumColGet(2), 21.0f);
+		EXPECT_FLOAT_EQ(A.SumColGet(3), 24.0f);
+	}
+
+	TEST(device_matrix_test, normalization)
+	{
+		const utils::DMatrix A = std::vector<std::vector<float>>{
+			{ 1.0f,	2.0f,	3.0f,	4.0f	},
+			{ 5.0f,	6.0f,	7.0f,	8.0f	},
+			{ 9.0f,	10.0f,	11.0f,	12.0f	}
+		};
+
+		const utils::DMatrix RFull = std::vector<std::vector<float>>{
+			{ 1.0f/78.0f,	2.0f/78.0f,		3.0f/78.0f,		4.0f/78.0f	},
+			{ 5.0f/78.0f,	6.0f/78.0f,		7.0f/78.0f,		8.0f/78.0f	},
+			{ 9.0f/78.0f,	10.0f/78.0f,	11.0f/78.0f,	12.0f/78.0f	}
+		};
+		const utils::DMatrix RRow = std::vector<std::vector<float>>{
+			{ 1.0f / 10.0f,	2.0f / 10.0f,	3.0f / 10.0f,	4.0f / 10.0f	},
+			{ 5.0f / 26.0f,	6.0f / 26.0f,	7.0f / 26.0f,	8.0f / 26.0f	},
+			{ 9.0f / 42.0f,	10.0f / 42.0f,	11.0f / 42.0f,	12.0f / 42.0f	}
+		};
+		const utils::DMatrix RCol = std::vector<std::vector<float>>{
+			{ 1.0f / 15.0f,	2.0f / 18.0f,	3.0f / 21.0f,	4.0f / 24.0f	},
+			{ 5.0f / 15.0f,	6.0f / 18.0f,	7.0f / 21.0f,	8.0f / 24.0f	},
+			{ 9.0f / 15.0f,	10.0f / 18.0f,	11.0f / 21.0f,	12.0f / 24.0f	}
+		};
+
+		utils::DMatrix B = A;
+		B.NormalizeFull();
+		EXPECT_TRUE(B == RFull);
+
+		B = A;
+		B.NormalizeByRow();
+		EXPECT_TRUE(B == RRow);
+
+		B = A;
+		B.NormalizeByColumn();
+		EXPECT_TRUE(B == RCol);
+		
 	}
 
 	

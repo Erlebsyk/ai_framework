@@ -18,18 +18,14 @@
 #include <cstdint>
 #include <array>
 
-#include "matrix.cuh"
+#include "utils/matrix.cuh"
 
 int main()
 {
 	std::cout << "Hello world!" << std::endl;
 
-	utils::test();
-
-	//ai::Matrix mat(4,4);
-
-	utils::DMatrix A(3,2);
-	utils::DMatrix B(2,3);
+	math::DMatrix A(3,2);
+	math::DMatrix B(2,3);
 
 	uint32_t val = 1;
 	for(uint32_t row_i = 0; row_i < A.n_rows_; row_i++)
@@ -49,13 +45,13 @@ int main()
 		}
 	}
 	std::cout << "Values set" << std::endl;
-	utils::Matrix h_A(A);
-	utils::Matrix h_B(B);
+	math::Matrix h_A(A);
+	math::Matrix h_B(B);
 	std::cout << h_A << std::endl;
 	std::cout << h_B << std::endl;
 
-	utils::DMatrix C(A * B);
-	utils::Matrix h_C(C);
+	math::DMatrix C(A * B);
+	math::Matrix h_C(C);
 
 	std::cout << h_C << std::endl;
 

@@ -6,8 +6,8 @@
  * 
 */
 
-#ifndef MATRIX_TEST_CUH_
-#define MATRIX_TEST_CUH_
+#ifndef MATRIX_CUH_
+#define MATRIX_CUH_
 
 /** Standard library header includes	*/
 #include <cstdint>
@@ -25,12 +25,10 @@
 namespace utils
 {
 	/** Variable declarations	*/
-
 	class DMatrix;
 	class Matrix;
 
 	/** Funciton declarations	*/
-	void test();
 
 	/** Classes, structs and enums	*/
 	class Matrix
@@ -67,7 +65,7 @@ namespace utils
 
 	class DMatrix : public Matrix
 	{
-	private:
+	protected:
 		cublasHandle_t cublas_handle_;
 
 	public:
@@ -80,6 +78,14 @@ namespace utils
 
 		float At(uint32_t col_i, uint32_t row_i) const;
 		void Set(uint32_t col_i, uint32_t row_i, float val);
+
+		float SumGet() const;
+		float SumRowGet(size_t row_i) const;
+		float SumColGet(size_t col_i) const;
+
+		void NormalizeFull();
+		void NormalizeByRow();
+		void NormalizeByColumn();
 
 		DMatrix &operator=(const DMatrix& other);
 		DMatrix &operator=(const Matrix& other);
@@ -101,8 +107,7 @@ namespace utils
 
 } // Namespace ai
 
-
-#endif // MATRIX_TEST_CUH_
+#endif // MATRIX_CUH_
 
 /*
  *	--- End of file ---

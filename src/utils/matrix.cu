@@ -28,10 +28,6 @@ namespace utils
 	const float h_kUnity	= 1.0F;
 
 	/** Funciton declarations	*/
-	void test()
-	{
-		std::cout << "In test" << std::endl;
-	}
 
 	/** Classes, structs and enums	*/
 
@@ -189,12 +185,12 @@ namespace utils
 		}
 		
 		// Create the cublas handle structure
-		const cublasStatus_t cublas_err = cublasCreate_v2(&cublas_handle_);
+		const cublasStatus_t cublas_err = cublasCreate(&cublas_handle_);
 		if (CUBLAS_STATUS_SUCCESS != cublas_err)
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cublasCreate_v2' returned with error code [" << cublas_err << "].";
+					<< "The function 'cublasCreate' returned with error code [" << cublas_err << "].";
 			throw( std::runtime_error(err_msg.str()) );
 		}
 	}
@@ -265,7 +261,7 @@ namespace utils
 		}
 		if(cublas_handle_ != nullptr)
 		{
-			cublasDestroy_v2(cublas_handle_);
+			cublasDestroy(cublas_handle_);
 			cublas_handle_ = nullptr;
 		}
 	}
@@ -295,6 +291,114 @@ namespace utils
 			throw(std::runtime_error(err_msg.str()));
 		}
 	}
+
+	float DMatrix::SumGet() const
+	{
+		float sum;
+		const cublasStatus_t cublas_err = cublasSasum(cublas_handle_, Length(), Get(), 1, &sum);
+		if (CUBLAS_STATUS_SUCCESS != cublas_err)
+		{
+			std::stringstream err_msg;
+			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
+				<< "The function 'cublasSasum' returned with error code [" << cublas_err << "].";
+			throw(std::runtime_error(err_msg.str()));
+		}
+
+		return sum;
+	}
+
+	float DMatrix::SumRowGet(const size_t row_i) const
+	{
+		// Boundary check
+		if (row_i >= n_rows_)
+		{
+			std::stringstream err_msg;
+			err_msg << "Out of range error in [" << __PRETTY_FUNCTION__ << "]. "
+				<< "The requested row was [" << row_i << "], but the matrix only has [" << n_rows_ << "] rows.";
+			throw(std::runtime_error(err_msg.str()));
+		}
+
+		// Obtain the sum
+		float row_sum;
+		const cublasStatus_t cublas_err = cublasSasum(cublas_handle_, n_cols_, Get() + row_i, n_rows_, &row_sum);
+		if (CUBLAS_STATUS_SUCCESS != cublas_err)
+		{
+			std::stringstream err_msg;
+			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
+				<< "The function 'cublasSasum' returned with error code [" << cublas_err << "].";
+			throw(std::runtime_error(err_msg.str()));
+		}
+
+		return row_sum;
+	}
+
+	float DMatrix::SumColGet(const size_t col_i) const
+	{
+		// Boundary check
+		if (col_i >= n_cols_)
+		{
+			std::stringstream err_msg;
+			err_msg << "Out of range error in [" << __PRETTY_FUNCTION__ << "]. "
+				<< "The requested column was [" << col_i << "], but the matrix only has [" << n_cols_ << "] columns.";
+			throw(std::runtime_error(err_msg.str()));
+		}
+
+		// Obtain the sum
+		float col_sum;
+		const cublasStatus_t cublas_err = cublasSasum(cublas_handle_, n_rows_, Get() + col_i * n_rows_, 1, &col_sum);
+		if (CUBLAS_STATUS_SUCCESS != cublas_err)
+		{
+			std::stringstream err_msg;
+			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
+				<< "The function 'cublasSasum' returned with error code [" << cublas_err << "].";
+			throw(std::runtime_error(err_msg.str()));
+		}
+
+		return col_sum;
+	}
+
+
+	void DMatrix::NormalizeFull()
+	{
+		*this *= (1.0f / SumGet());
+	}
+
+	void DMatrix::NormalizeByRow()
+	{
+		float row_factor;
+		cublasStatus_t cublas_err;
+		for (size_t i = 0; i < n_rows_; i++)
+		{
+			row_factor = 1.0f / SumRowGet(i);
+			cublas_err = cublasSscal(cublas_handle_, n_cols_, &row_factor, mat_ + i, n_rows_);
+			if (CUBLAS_STATUS_SUCCESS != cublas_err)
+			{
+				std::stringstream err_msg;
+				err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
+					<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
+				throw(std::runtime_error(err_msg.str()));
+			}
+		}
+	}
+
+	void DMatrix::NormalizeByColumn()
+	{
+		float col_factor;
+		cublasStatus_t cublas_err;
+		for (size_t i = 0; i < n_cols_; i++)
+		{
+			col_factor = 1.0f / SumColGet(i);
+			cublas_err = cublasSscal(cublas_handle_, n_rows_, &col_factor, mat_ + i * n_rows_, 1);
+			if (CUBLAS_STATUS_SUCCESS != cublas_err)
+			{
+				std::stringstream err_msg;
+				err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
+					<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
+				throw(std::runtime_error(err_msg.str()));
+			}
+		}
+	}
+
 
 	DMatrix& DMatrix::operator=(const DMatrix& other)
 	{
@@ -329,12 +433,12 @@ namespace utils
 
 	DMatrix &DMatrix::operator-()
 	{
-		const cublasStatus_t cublas_err = cublasSscal_v2(cublas_handle_, Length(), &h_kMinusOne, mat_, 1);
+		const cublasStatus_t cublas_err = cublasSscal(cublas_handle_, Length(), &h_kMinusOne, mat_, 1);
 		if (CUBLAS_STATUS_SUCCESS != cublas_err)
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cublasSscal_v2' returned with error code [" << cublas_err << "].";
+					<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
 			throw(std::runtime_error(err_msg.str()));
 		}
 		return *this;
@@ -343,12 +447,35 @@ namespace utils
 
 	DMatrix& DMatrix::operator += (const DMatrix& rhs)
 	{
-		const cublasStatus_t cublas_err = cublasSaxpy_v2(cublas_handle_, Length(), &h_kUnity, rhs.mat_, 1, this->mat_, 1);
+		cublasStatus_t cublas_err = CUBLAS_STATUS_NOT_SUPPORTED;
+		if ((n_cols_ == rhs.n_cols_) && (n_rows_ == rhs.n_rows_))
+		{
+			cublas_err = cublasSaxpy(cublas_handle_, Length(), &h_kUnity, rhs.mat_, 1, mat_, 1);
+		}
+		else if ((n_cols_ == rhs.n_cols_) && (1 == rhs.n_rows_))
+		{
+			ptrdiff_t offset = 0;
+			for (size_t i = 0; i < n_rows_; i++)
+			{
+				offset = i;
+				cublas_err = cublasSaxpy(cublas_handle_, Length() - offset, &h_kUnity, rhs.mat_, 1, mat_ + offset, n_rows_);
+			}
+		}
+		else if ((n_rows_ == rhs.n_rows_) && (1 == rhs.n_cols_))
+		{
+			ptrdiff_t offset = 0;
+			for (size_t i = 0; i < n_cols_; i++)
+			{
+				offset = i * n_rows_;
+				cublas_err = cublasSaxpy(cublas_handle_, Length() - offset, &h_kUnity, rhs.mat_, 1, mat_ + offset, 1);
+			}
+		}
+
 		if (CUBLAS_STATUS_SUCCESS != cublas_err)
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSaxpy_v2' returned with error code [" << cublas_err << "].";
+				<< "The function 'cublasSaxpy' returned with error code [" << cublas_err << "].";
 			throw(std::runtime_error(err_msg.str()));
 		}
 		return *this;
@@ -356,12 +483,12 @@ namespace utils
 	
 	DMatrix& DMatrix::operator *= (const float d_rhs)
 	{
-		const cublasStatus_t cublas_err = cublasSscal_v2(cublas_handle_, Size(), &d_rhs, mat_, 1);
+		const cublasStatus_t cublas_err = cublasSscal(cublas_handle_, Length(), &d_rhs, mat_, 1);
 		if (CUBLAS_STATUS_SUCCESS != cublas_err)
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSscal_v2' returned with error code [" << cublas_err << "].";
+				<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
 			throw(std::runtime_error(err_msg.str()));
 		}
 		return *this;
@@ -369,12 +496,12 @@ namespace utils
 
 	DMatrix& DMatrix::operator *= (const float* d_rhs)
 	{
-		const cublasStatus_t cublas_err = cublasSscal_v2(cublas_handle_, Size(), d_rhs, mat_, 1);
+		const cublasStatus_t cublas_err = cublasSscal(cublas_handle_, Length(), d_rhs, mat_, 1);
 		if (CUBLAS_STATUS_SUCCESS != cublas_err)
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSscal_v2' returned with error code [" << cublas_err << "].";
+				<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
 			throw(std::runtime_error(err_msg.str()));
 		}
 		return *this;
@@ -399,7 +526,7 @@ namespace utils
 
 		DMatrix result(rhs.n_cols_, lhs.n_rows_);
 
-		const cublasStatus_t cublas_err = cublasSgemm_v2(
+		const cublasStatus_t cublas_err = cublasSgemm(
 			lhs.cublas_handle_, CUBLAS_OP_N, CUBLAS_OP_N,
 			result.n_rows_, result.n_cols_, lhs.n_cols_,
 			&h_kUnity, lhs.mat_, lhs.n_rows_, rhs.mat_, rhs.n_rows_, &h_kZero, result.mat_, result.n_rows_
@@ -409,7 +536,7 @@ namespace utils
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSgemm_v2' returned with error code [" << cublas_err << "].";
+				<< "The function 'cublasSgemm' returned with error code [" << cublas_err << "].";
 			throw(std::runtime_error(err_msg.str()));
 		}
 

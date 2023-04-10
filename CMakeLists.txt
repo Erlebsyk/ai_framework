@@ -12,11 +12,13 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 
 set(HeaderFiles
-    src/matrix.cuh
+    src/utils/matrix.cuh
+    src/ai/neural_net.hpp
 )
 
 set(SourceFiles
-    src/matrix.cu
+    src/utils/matrix.cu
+    src/ai/neural_net.cpp
 )
 
 add_library(${ThisLib} STATIC ${SourceFiles} ${HeaderFiles})
