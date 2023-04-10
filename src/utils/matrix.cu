@@ -28,11 +28,89 @@ namespace utils
 	const float h_kUnity	= 1.0F;
 
 	/** Funciton declarations	*/
+	void cuda_error_parser(
+		std::string caller_f,
+		std::string called_f,
+		cudaError_t error,
+		std::string context = ""
+	);
+
+	void cublas_error_parser(
+		std::string caller_f,
+		std::string called_f,
+		cublasStatus_t status,
+		std::string context = ""
+	);
+
+	__global__ void d_normalize_full();
+	__global__ void d_normalize_by_row();
+	__global__ void d_normalize_by_column();
+
 
 	/** Classes, structs and enums	*/
 
 
 	/** Funciton Implementations	 */
+
+	void cuda_error_parser(
+		const std::string caller_f,
+		const std::string called_f,
+		const cudaError_t error,
+		const std::string context
+	)
+	{
+		if (cudaSuccess != error)
+		{
+			std::stringstream err_msg;
+			err_msg << "Runtime error in [" << caller_f << "]";
+
+			if (context != "")
+				err_msg << " with context [" << context << "]. ";
+			else
+				err_msg << ". ";
+
+			err_msg << "The function [" << called_f << "] returned with error code [" << error << "].";
+			throw(std::runtime_error(err_msg.str()));
+		}
+	}
+
+	void cublas_error_parser(
+		std::string caller_f,
+		std::string called_f,
+		cublasStatus_t status,
+		std::string context
+	)
+	{
+		if (CUBLAS_STATUS_SUCCESS != status)
+		{
+			std::stringstream err_msg;
+			err_msg << "Runtime error in [" << caller_f << "]";
+
+			if (context != "")
+				err_msg << " with context [" << context << "]. ";
+			else
+				err_msg << ". ";
+
+			err_msg << "The function [" << called_f << "] returned with status code [" << status << "].";
+			throw(std::runtime_error(err_msg.str()));
+		}
+	}
+
+	__global__ void d_normalize_full()
+	{
+
+	}
+
+	__global__ void d_normalize_by_row()
+	{
+
+	}
+
+	__global__ void d_normalize_by_column()
+	{
+
+	}
+
 	Matrix::Matrix(const uint32_t n_cols, const uint32_t n_rows, float* mat) : 
 		n_cols_	{ n_cols	},
 		n_rows_	{ n_rows 	},
@@ -56,7 +134,8 @@ namespace utils
 	Matrix::Matrix(const DMatrix &d_mat) : 
 		Matrix(d_mat.n_cols_, d_mat.n_rows_)
 	{
-		cudaMemcpy(mat_, d_mat.mat_, Size(), cudaMemcpyDeviceToHost);
+		const cudaError_t cuda_err = cudaMemcpy(mat_, d_mat.mat_, Size(), cudaMemcpyDeviceToHost);
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "d_mat.mat_ -> mat_");
 	}
 
 	Matrix::~Matrix()
@@ -106,40 +185,41 @@ namespace utils
 
 	Matrix& Matrix::operator=(const Matrix& other)
 	{
-		if((this->n_cols_ != other.n_cols_) || (this->n_rows_ != other.n_rows_))
+		if((n_cols_ != other.n_cols_) || (n_rows_ != other.n_rows_))
 		{
 			/** \todo throw eception */
 		}
 
-		memcpy( this->mat_, other.mat_, Size() );
+		memcpy( mat_, other.mat_, Size() );
 		return *this;
 	}
 
 	Matrix& Matrix::operator=(const DMatrix& other)
 	{
-		if((this->n_cols_ != other.n_cols_) || (this->n_rows_ != other.n_rows_))
+		if((n_cols_ != other.n_cols_) || (n_rows_ != other.n_rows_))
 		{
 			/** \todo throw eception */
 		}
 
-		cudaMemcpy(this->mat_, other.mat_, Size(), cudaMemcpyDeviceToHost);
+		const cudaError_t cuda_err = cudaMemcpy(mat_, other.mat_, Size(), cudaMemcpyDeviceToHost);
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "other.mat_ -> mat_");
 		return *this;
 	}
 
 	bool Matrix::operator==(const Matrix& other) const
 	{
 		bool equal = true;
-		if(this->n_cols_ != other.n_cols_)
+		if(n_cols_ != other.n_cols_)
 			equal = false;
-		else if(this->n_rows_ != other.n_rows_)
+		else if(n_rows_ != other.n_rows_)
 			equal = false;
 		
 		for(size_t col_i = 0; (col_i < n_cols_) && (equal); col_i++)
 		{
 			for(size_t row_i = 0; (row_i < n_rows_) && (equal); row_i++)
 			{
-				equal = fabsf(this->At(col_i, row_i) - other.At(col_i, row_i)) < FLT_EPSILON;
-				equal = equal || (isnan(this->At(col_i, row_i) ) && other.At(col_i, row_i));
+				equal = fabsf(At(col_i, row_i) - other.At(col_i, row_i)) < FLT_EPSILON;
+				equal = equal || (isnan(At(col_i, row_i) ) && other.At(col_i, row_i));
 			}
 		}
 
@@ -172,47 +252,47 @@ namespace utils
 
 	DMatrix::DMatrix(const uint32_t n_cols, const uint32_t n_rows) : 
 		Matrix(n_cols, n_rows, nullptr),
+		d_n_cols_ { nullptr },
+		d_n_rows_ { nullptr },
 		cublas_handle_{}
 	{
 		// Allocate the matrix buffer on the device.
-		const cudaError_t cuda_err = cudaMalloc(&mat_, Size());
-		if (cudaSuccess != cuda_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cudaMalloc' returned with error code [" << cuda_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
-		
+		cudaError_t cuda_err = cudaMalloc(&mat_, Size());
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMalloc", cuda_err, "mat_");
+
+		cuda_err = cudaMalloc(&d_n_cols_, sizeof(uint32_t));
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMalloc", cuda_err, "d_n_cols_");
+
+		cuda_err = cudaMalloc(&d_n_rows_, sizeof(uint32_t));
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMalloc", cuda_err, "d_n_rows_");
+
+		cuda_err = cudaMemcpy(d_n_cols_, &n_cols_, sizeof(uint32_t), cudaMemcpyHostToDevice);
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "n_cols_ -> d_n_cols_");
+
+		cuda_err = cudaMemcpy(d_n_rows_, &n_rows_, sizeof(uint32_t), cudaMemcpyHostToDevice);
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "n_rows_ -> d_n_rows_");
+
 		// Create the cublas handle structure
 		const cublasStatus_t cublas_err = cublasCreate(&cublas_handle_);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cublasCreate' returned with error code [" << cublas_err << "].";
-			throw( std::runtime_error(err_msg.str()) );
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasCreate", cublas_err, "cublas_handle_");
 	}
 
 	DMatrix::DMatrix(const DMatrix &other) : 
 		DMatrix(other.n_cols_, other.n_rows_)
 	{
 		const cudaError_t cuda_err = cudaMemcpy(mat_, other.mat_, Size(), cudaMemcpyDeviceToDevice);
-		if (cudaSuccess != cuda_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "] while attempting to copy data from device to device. "
-					<< "The function 'cudaMemcpy' returned with error code [" << cuda_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "other.mat_ -> mat_");
 	}
 
 	DMatrix::DMatrix(DMatrix &&other) : 
 		Matrix(other.n_cols_, other.n_rows_, other.mat_),
-		cublas_handle_{ other.cublas_handle_ }
+		d_n_cols_		{ other.d_n_cols_		},
+		d_n_rows_		{ other.d_n_rows_		},
+		cublas_handle_	{ other.cublas_handle_	}
 	{
 		other.mat_ = nullptr;
+		other.d_n_cols_ = nullptr;
+		other.d_n_rows_ = nullptr;
 		other.cublas_handle_ = nullptr;
 	}
 
@@ -220,13 +300,7 @@ namespace utils
 		DMatrix(h_mat.n_cols_, h_mat.n_rows_)
 	{
 		const cudaError_t cuda_err = cudaMemcpy(mat_, h_mat.Get(), Size(), cudaMemcpyHostToDevice);
-		if (cudaSuccess != cuda_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "] while attempting to copy data from host to device. "
-					<< "The function 'cudaMemcpy' returned with error code [" << cuda_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "h_mat -> mat_");
 	}
 
 	DMatrix::DMatrix(const std::vector<std::vector<float>> &mat) :
@@ -259,6 +333,16 @@ namespace utils
 			cudaFree(mat_);
 			mat_ = nullptr;
 		}
+		if (d_n_cols_ != nullptr)
+		{
+			cudaFree(d_n_cols_);
+			d_n_cols_ = nullptr;
+		}
+		if (d_n_rows_ != nullptr)
+		{
+			cudaFree(d_n_rows_);
+			d_n_rows_ = nullptr;
+		}
 		if(cublas_handle_ != nullptr)
 		{
 			cublasDestroy(cublas_handle_);
@@ -266,44 +350,35 @@ namespace utils
 		}
 	}
 
-	float DMatrix::At(const uint32_t col_i, uint32_t row_i) const
+	float DMatrix::At(const uint32_t col_i, const uint32_t row_i) const
 	{
 		float h_val;
 		const cudaError_t cuda_err = cudaMemcpy(&h_val, &(mat_[n_rows_ * col_i + row_i]), sizeof(float), cudaMemcpyDeviceToHost);
-		if (cudaSuccess != cuda_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "] while attempting to copy data from device to host. "
-					<< "The function 'cudaMemcpy' returned with error code [" << cuda_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "mat_[n_rows_ * col_i + row_i] -> h_val");
 		return h_val;
 	}
 
 	void DMatrix::Set(const uint32_t col_i, const uint32_t row_i, const float val)
 	{
 		const cudaError_t cuda_err = cudaMemcpy(&(mat_[n_rows_ * col_i + row_i]), &val, sizeof(float), cudaMemcpyHostToDevice);
-		if (cudaSuccess != cuda_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "] while attempting to copy data from host to device. "
-					<< "The function 'cudaMemcpy' returned with error code [" << cuda_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "val -> mat_[n_rows_ * col_i + row_i]");
+	}
+
+	__device__ float DMatrix::d_At(const uint32_t col_i, const uint32_t row_i) const
+	{
+		return mat_[n_rows_ * col_i + row_i];
+	}
+
+	__device__ void DMatrix::d_Set(const uint32_t col_i, const uint32_t row_i, const float val)
+	{
+		mat_[n_rows_ * col_i + row_i] = val;
 	}
 
 	float DMatrix::SumGet() const
 	{
 		float sum;
 		const cublasStatus_t cublas_err = cublasSasum(cublas_handle_, Length(), Get(), 1, &sum);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSasum' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
-
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSasum", cublas_err);
 		return sum;
 	}
 
@@ -321,13 +396,7 @@ namespace utils
 		// Obtain the sum
 		float row_sum;
 		const cublasStatus_t cublas_err = cublasSasum(cublas_handle_, n_cols_, Get() + row_i, n_rows_, &row_sum);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSasum' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSasum", cublas_err);
 
 		return row_sum;
 	}
@@ -346,17 +415,10 @@ namespace utils
 		// Obtain the sum
 		float col_sum;
 		const cublasStatus_t cublas_err = cublasSasum(cublas_handle_, n_rows_, Get() + col_i * n_rows_, 1, &col_sum);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSasum' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSasum", cublas_err);
 
 		return col_sum;
 	}
-
 
 	void DMatrix::NormalizeFull()
 	{
@@ -371,13 +433,7 @@ namespace utils
 		{
 			row_factor = 1.0f / SumRowGet(i);
 			cublas_err = cublasSscal(cublas_handle_, n_cols_, &row_factor, mat_ + i, n_rows_);
-			if (CUBLAS_STATUS_SUCCESS != cublas_err)
-			{
-				std::stringstream err_msg;
-				err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
-				throw(std::runtime_error(err_msg.str()));
-			}
+			cublas_error_parser(__PRETTY_FUNCTION__, "cublasSscal", cublas_err);
 		}
 	}
 
@@ -389,39 +445,35 @@ namespace utils
 		{
 			col_factor = 1.0f / SumColGet(i);
 			cublas_err = cublasSscal(cublas_handle_, n_rows_, &col_factor, mat_ + i * n_rows_, 1);
-			if (CUBLAS_STATUS_SUCCESS != cublas_err)
-			{
-				std::stringstream err_msg;
-				err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
-				throw(std::runtime_error(err_msg.str()));
-			}
+			cublas_error_parser(__PRETTY_FUNCTION__, "cublasSscal", cublas_err);
 		}
 	}
 
 
 	DMatrix& DMatrix::operator=(const DMatrix& other)
 	{
-		if((this->n_cols_ != other.n_cols_) || (this->n_rows_ != other.n_rows_))
+		if((n_cols_ != other.n_cols_) || (n_rows_ != other.n_rows_))
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. Incompatible sizes. The two matrices must have equal dimensions.";
 			throw(std::runtime_error(err_msg.str()));
 		}
-		cudaMemcpy(mat_, other.Get(), Size(), cudaMemcpyDeviceToDevice);
+		const cudaError_t cuda_err = cudaMemcpy(mat_, other.Get(), Size(), cudaMemcpyDeviceToDevice);
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "other.mat_ -> mat_");
 		return *this;
 	}
 
 	DMatrix& DMatrix::operator=(const Matrix& other)
 	{
-		if((this->n_cols_ != other.n_cols_) || (this->n_rows_ != other.n_rows_))
+		if((n_cols_ != other.n_cols_) || (n_rows_ != other.n_rows_))
 		{
 			std::stringstream err_msg;
 			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]."
 					<< "The two matrices have incompatible sizes.The two matrices must have equal dimensions.";
 			throw(std::runtime_error(err_msg.str()));
 		}
-		cudaMemcpy(mat_, other.Get(), Size(), cudaMemcpyHostToDevice);
+		const cudaError_t cuda_err = cudaMemcpy(mat_, other.Get(), Size(), cudaMemcpyHostToDevice);
+		cuda_error_parser(__PRETTY_FUNCTION__, "cudaMemcpy", cuda_err, "other.mat_ -> mat_");
 		return *this;
 	}
 
@@ -434,20 +486,14 @@ namespace utils
 	DMatrix &DMatrix::operator-()
 	{
 		const cublasStatus_t cublas_err = cublasSscal(cublas_handle_, Length(), &h_kMinusOne, mat_, 1);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-					<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSscal", cublas_err);
 		return *this;
 	}
 
 
 	DMatrix& DMatrix::operator += (const DMatrix& rhs)
 	{
-		cublasStatus_t cublas_err = CUBLAS_STATUS_NOT_SUPPORTED;
+		cublasStatus_t cublas_err = CUBLAS_STATUS_SUCCESS;
 		if ((n_cols_ == rhs.n_cols_) && (n_rows_ == rhs.n_rows_))
 		{
 			cublas_err = cublasSaxpy(cublas_handle_, Length(), &h_kUnity, rhs.mat_, 1, mat_, 1);
@@ -455,7 +501,7 @@ namespace utils
 		else if ((n_cols_ == rhs.n_cols_) && (1 == rhs.n_rows_))
 		{
 			ptrdiff_t offset = 0;
-			for (size_t i = 0; i < n_rows_; i++)
+			for (size_t i = 0; (i < n_rows_) && (CUBLAS_STATUS_SUCCESS == cublas_err); i++)
 			{
 				offset = i;
 				cublas_err = cublasSaxpy(cublas_handle_, Length() - offset, &h_kUnity, rhs.mat_, 1, mat_ + offset, n_rows_);
@@ -464,46 +510,32 @@ namespace utils
 		else if ((n_rows_ == rhs.n_rows_) && (1 == rhs.n_cols_))
 		{
 			ptrdiff_t offset = 0;
-			for (size_t i = 0; i < n_cols_; i++)
+			for (size_t i = 0; (i < n_cols_) && (CUBLAS_STATUS_SUCCESS == cublas_err); i++)
 			{
 				offset = i * n_rows_;
 				cublas_err = cublasSaxpy(cublas_handle_, Length() - offset, &h_kUnity, rhs.mat_, 1, mat_ + offset, 1);
 			}
 		}
-
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
+		else
 		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSaxpy' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
+			cublas_err = CUBLAS_STATUS_NOT_SUPPORTED;
 		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSaxpy", cublas_err);
+		
 		return *this;
 	}
 	
 	DMatrix& DMatrix::operator *= (const float d_rhs)
 	{
 		const cublasStatus_t cublas_err = cublasSscal(cublas_handle_, Length(), &d_rhs, mat_, 1);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSscal", cublas_err);
 		return *this;
 	}
 
 	DMatrix& DMatrix::operator *= (const float* d_rhs)
 	{
 		const cublasStatus_t cublas_err = cublasSscal(cublas_handle_, Length(), d_rhs, mat_, 1);
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSscal' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSscal", cublas_err);
 		return *this;
 	}
 		
@@ -531,14 +563,7 @@ namespace utils
 			result.n_rows_, result.n_cols_, lhs.n_cols_,
 			&h_kUnity, lhs.mat_, lhs.n_rows_, rhs.mat_, rhs.n_rows_, &h_kZero, result.mat_, result.n_rows_
 		);
-
-		if (CUBLAS_STATUS_SUCCESS != cublas_err)
-		{
-			std::stringstream err_msg;
-			err_msg << "Runtime error in [" << __PRETTY_FUNCTION__ << "]. "
-				<< "The function 'cublasSgemm' returned with error code [" << cublas_err << "].";
-			throw(std::runtime_error(err_msg.str()));
-		}
+		cublas_error_parser(__PRETTY_FUNCTION__, "cublasSgemm", cublas_err);
 
 		return result;
 	}

@@ -66,6 +66,8 @@ namespace utils
 	class DMatrix : public Matrix
 	{
 	protected:
+		uint32_t *d_n_cols_;
+		uint32_t *d_n_rows_;
 		cublasHandle_t cublas_handle_;
 
 	public:
@@ -78,6 +80,9 @@ namespace utils
 
 		float At(uint32_t col_i, uint32_t row_i) const;
 		void Set(uint32_t col_i, uint32_t row_i, float val);
+
+		__device__ float d_At(uint32_t col_i, uint32_t row_i) const;
+		__device__ void d_Set(uint32_t col_i, uint32_t row_i, float val);
 
 		float SumGet() const;
 		float SumRowGet(size_t row_i) const;
